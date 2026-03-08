@@ -7,6 +7,7 @@ import {
   FlyControls,
   Time,
   Vec3,
+  AnimationController,
 } from "@digitalmeadow/webgpu-renderer";
 import { GLTFSceneLoader } from "../src/index";
 
@@ -20,8 +21,24 @@ async function main() {
   const renderer = new Renderer(canvas);
   await renderer.init();
 
-  const camera = new Camera(renderer.getDevice());
+  const camera = new Camera(
+    renderer.getDevice(),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    canvas.clientWidth / canvas.clientHeight,
+  );
   camera.position.set(0, 1, 5);
+
+  function resize() {
+    const rect = canvas.getBoundingClientRect();
+    renderer.resize(rect.width, rect.height);
+    camera.resize(rect.width, rect.height);
+  }
+
+  window.addEventListener("resize", resize);
+  resize();
 
   const controls = new FlyControls(canvas, camera);
 
@@ -45,7 +62,13 @@ async function main() {
 
   // To avoid needing a real .glb file inside this test, let's just
   // ensure everything compiles and runs to this point.
-  await loader.load("/test/assets/gltf_test.gltf", scene);
+  const { clips } = await loader.load("/test/assets/gltf_test.gltf", scene);
+
+  for (const clip of clips) {
+    const controller = new AnimationController(clip);
+    scene.animationManager.add(controller);
+    controller.play(); // This will auto-play the animation continuously
+  }
 
   world.addScene(scene);
 

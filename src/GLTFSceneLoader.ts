@@ -16,6 +16,10 @@ import {
   MaterialBasic,
   Texture,
   MaterialBase,
+  AnimationClip,
+  AnimationCurve,
+  AnimationPath,
+  AnimationInterpolation,
 } from "@digitalmeadow/webgpu-renderer";
 
 export class GroupEntity extends Entity {
@@ -32,49 +36,125 @@ export class GLTFSceneLoader {
 
   private parsedMaterials = new Map<GLTFMaterial, MaterialBase>();
   private parsedTextures = new Map<GLTFTexture, Texture>();
+  private nodeToEntityMap = new Map<GLTFNode, Entity>();
 
   constructor(renderer: Renderer) {
     this.renderer = renderer;
   }
 
-  public async load(url: string, scene: Scene): Promise<void> {
+  public async load(
+    url: string,
+    scene: Scene,
+  ): Promise<{ clips: AnimationClip[] }> {
     const io = new WebIO();
 
     // Fetch and load the document automatically via WebIO
     const document = await io.read(url);
 
-    await this.processDocument(document, scene);
+    return await this.processDocument(document, scene);
   }
 
-  public async loadFromBuffer(buffer: Uint8Array, scene: Scene): Promise<void> {
+  public async loadFromBuffer(
+    buffer: Uint8Array,
+    scene: Scene,
+  ): Promise<{ clips: AnimationClip[] }> {
     const io = new WebIO();
     const document = await io.readBinary(buffer);
-    await this.processDocument(document, scene);
+    return await this.processDocument(document, scene);
   }
 
-  private async processDocument(
+  private processDocument(
     document: Document,
     scene: Scene,
-  ): Promise<void> {
+  ): Promise<{ clips: AnimationClip[] }> {
+    this.nodeToEntityMap.clear();
+
     const root = document.getRoot();
     const defaultScene = root.getDefaultScene() || root.listScenes()[0];
 
-    if (!defaultScene) return;
+    if (!defaultScene) return Promise.resolve({ clips: [] });
 
     for (const gltfNode of defaultScene.listChildren()) {
-      const entity = this.processNode(gltfNode);
-      if (entity) {
-        scene.add(entity);
-      }
+      this.processNode(gltfNode, scene);
     }
+
+    const clips = this.processAnimations(document);
+
+    return Promise.resolve({ clips });
   }
 
-  private processNode(gltfNode: GLTFNode): Entity | null {
+  private processAnimations(document: Document): AnimationClip[] {
+    const root = document.getRoot();
+    const gltfAnimations = root.listAnimations();
+    const clips: AnimationClip[] = [];
+
+    for (const gltfAnim of gltfAnimations) {
+      const clip = new AnimationClip(gltfAnim.getName() || "Animation");
+
+      for (const channel of gltfAnim.listChannels()) {
+        const targetNode = channel.getTargetNode();
+        if (!targetNode) continue;
+
+        const path = channel.getTargetPath();
+        if (path !== "translation" && path !== "rotation" && path !== "scale") {
+          continue; // Currently only transform paths are supported
+        }
+
+        const entity = this.nodeToEntityMap.get(targetNode);
+        if (!entity) continue;
+
+        const sampler = channel.getSampler();
+        if (!sampler) continue;
+
+        const inputAccessor = sampler.getInput();
+        const outputAccessor = sampler.getOutput();
+        if (!inputAccessor || !outputAccessor) continue;
+
+        const timestamps = inputAccessor.getArray();
+        const keyframes = outputAccessor.getArray();
+
+        if (
+          !timestamps ||
+          !keyframes ||
+          !(timestamps instanceof Float32Array) ||
+          !(keyframes instanceof Float32Array)
+        ) {
+          continue;
+        }
+
+        let interpolation: AnimationInterpolation = "LINEAR";
+        const samplerInterpolation = sampler.getInterpolation();
+        if (samplerInterpolation === "STEP") {
+          interpolation = "STEP";
+        } else if (samplerInterpolation === "CUBICSPLINE") {
+          // Fallback to linear for now, but save as CUBICSPLINE when implemented
+          interpolation = "LINEAR";
+        }
+
+        const curve = new AnimationCurve(
+          entity.transform,
+          path as AnimationPath,
+          timestamps,
+          keyframes,
+          interpolation,
+        );
+
+        clip.addCurve(curve);
+      }
+
+      clips.push(clip);
+    }
+
+    return clips;
+  }
+
+  private processNode(gltfNode: GLTFNode, scene: Scene): Entity | null {
     const name = gltfNode.getName() || "Node";
 
     // Create base entity for this node (Group or Mesh)
     const gltfMesh = gltfNode.getMesh();
     let rootEntity: Entity;
+    const entitiesCreated: Entity[] = [];
 
     if (gltfMesh) {
       const primitives = gltfMesh.listPrimitives();
@@ -82,19 +162,23 @@ export class GLTFSceneLoader {
       if (primitives.length === 1) {
         // Single primitive, we can just make this node a Mesh
         rootEntity = this.createMeshFromPrimitive(primitives[0], name);
+        entitiesCreated.push(rootEntity);
       } else {
         // Multiple primitives, we need a Group entity with Mesh children
         rootEntity = new GroupEntity(name);
+        entitiesCreated.push(rootEntity);
         for (let i = 0; i < primitives.length; i++) {
           const primEntity = this.createMeshFromPrimitive(
             primitives[i],
             `${name}_prim${i}`,
           );
+          entitiesCreated.push(primEntity);
           rootEntity.transform.addChild(primEntity.transform);
         }
       }
     } else {
       rootEntity = new GroupEntity(name);
+      entitiesCreated.push(rootEntity);
     }
 
     // Apply Transform
@@ -119,9 +203,16 @@ export class GLTFSceneLoader {
       }
     }
 
+    // Now safely add them to the scene
+    for (const ent of entitiesCreated) {
+      scene.add(ent);
+    }
+
+    this.nodeToEntityMap.set(gltfNode, rootEntity);
+
     // Process children
     for (const childNode of gltfNode.listChildren()) {
-      const childEntity = this.processNode(childNode);
+      const childEntity = this.processNode(childNode, scene);
       if (childEntity) {
         rootEntity.transform.addChild(childEntity.transform);
       }
