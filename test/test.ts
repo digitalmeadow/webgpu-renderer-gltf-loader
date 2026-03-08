@@ -21,9 +21,9 @@ async function main() {
   await renderer.init();
 
   const camera = new Camera(renderer.getDevice());
-  camera.transform.setPosition(0, 2, 5);
+  camera.position.set(0, 1, 5);
 
-  const controls = new FlyControls(camera, canvas);
+  const controls = new FlyControls(canvas, camera);
 
   const world = new World();
   const scene = new Scene("MainScene");
@@ -32,30 +32,29 @@ async function main() {
   light.transform.setPosition(5, 10, 5);
   light.transform.lookAt(new Vec3(0, 0, 0));
   light.intensity = 1.0;
-  light.castShadows = true;
   scene.add(light);
-  
+
   // We'd ideally load a real GLTF here.
   // We'll just verify the instantiation and hook setup for now.
   const loader = new GLTFSceneLoader(renderer);
-  
+
   loader.onProcessNode = (gltfNode, entity) => {
     console.log(`Loaded node: ${gltfNode.getName()}`, entity);
     return true;
   };
-  
-  // To avoid needing a real .glb file inside this test, let's just 
+
+  // To avoid needing a real .glb file inside this test, let's just
   // ensure everything compiles and runs to this point.
-  // await loader.load("some_model.glb", scene);
-  
+  await loader.load("/test/assets/gltf_test.gltf", scene);
+
   world.addScene(scene);
-  
+
   const time = new Time();
-  
+
   function render() {
     time.update();
-    controls.update(time.deltaTime);
-    renderer.render(world, camera);
+    controls.update(time.delta);
+    renderer.render(world, camera, time);
     requestAnimationFrame(render);
   }
 
