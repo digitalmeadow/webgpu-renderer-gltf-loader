@@ -1,0 +1,11 @@
+src/
+test/
+vite.config.ts
+tsconfig.json
+.gitignore
+.gitattributes
+.tool-versions
+pnpm-lock.yaml
+node_modules/
+.DS_Store
+.git/
