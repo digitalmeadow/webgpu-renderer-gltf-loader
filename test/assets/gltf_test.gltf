@@ -229,7 +229,8 @@
 		},
 		{
 			"extras":{
-				"physics":"kinematic"
+				"physics":"kinematic",
+				"isConvexHull":true
 			},
 			"mesh":1,
 			"name":"Child.001",

@@ -8,8 +8,13 @@ import {
   Time,
   Vec3,
   AnimationController,
+  ConvexHull,
 } from "@digitalmeadow/webgpu-renderer";
-import { GLTFSceneLoader } from "../src/index";
+import {
+  GLTFSceneLoader,
+  getPrimitivePositions,
+  getPrimitiveIndices,
+} from "../src/index";
 
 async function main() {
   const canvas = document.getElementById("gpu-canvas") as HTMLCanvasElement;
@@ -51,12 +56,45 @@ async function main() {
   light.intensity = 1.0;
   scene.add(light);
 
-  // We'd ideally load a real GLTF here.
-  // We'll just verify the instantiation and hook setup for now.
   const loader = new GLTFSceneLoader(renderer);
 
+  loader.onPreProcessNode = (gltfNode) => {
+    // Check if the node has custom GLTF extras marking it as a physics body
+    console.log("node: ", gltfNode);
+
+    const extras = gltfNode.getExtras() as { isConvexHull?: boolean } | null;
+    console.log("extras: ", extras);
+
+    if (extras?.isConvexHull) {
+      console.log(
+        `[Physics] Extracting ConvexHull from node: ${gltfNode.getName()}`,
+      );
+
+      const mesh = gltfNode.getMesh();
+      if (mesh) {
+        for (const [index, primitive] of mesh.listPrimitives().entries()) {
+          const positions = getPrimitivePositions(primitive);
+          const indices = getPrimitiveIndices(primitive);
+
+          const hull = new ConvexHull(positions, indices);
+          console.log(`  Primitive ${index} -> ConvexHull`, {
+            verticesCount: hull.vertexPositions.length / 3,
+            trianglesCount: hull.vertexIndices.length / 3,
+            hull,
+          });
+        }
+      }
+
+      // Return false to skip building visual WebGPU Meshes/Materials for this collider
+      return false;
+    }
+
+    // Return true to process this node as a standard visual mesh
+    return true;
+  };
+
   loader.onProcessNode = (gltfNode, entity) => {
-    console.log(`Loaded node: ${gltfNode.getName()}`, entity);
+    console.log(`[Visual] Loaded node: ${gltfNode.getName()}`, entity);
     return true;
   };
 

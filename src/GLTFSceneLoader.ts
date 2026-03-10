@@ -28,10 +28,12 @@ export class GroupEntity extends Entity {
   }
 }
 
+export type PreProcessNodeHook = (gltfNode: GLTFNode) => boolean;
 export type ProcessNodeHook = (gltfNode: GLTFNode, entity: Entity) => boolean;
 
 export class GLTFSceneLoader {
   private renderer: Renderer;
+  public onPreProcessNode: PreProcessNodeHook | null = null;
   public onProcessNode: ProcessNodeHook | null = null;
 
   private parsedMaterials = new Map<GLTFMaterial, MaterialBase>();
@@ -151,8 +153,13 @@ export class GLTFSceneLoader {
   private processNode(gltfNode: GLTFNode, scene: Scene): Entity | null {
     const name = gltfNode.getName() || "Node";
 
+    let shouldBuildGeometry = true;
+    if (this.onPreProcessNode) {
+      shouldBuildGeometry = this.onPreProcessNode(gltfNode);
+    }
+
     // Create base entity for this node (Group or Mesh)
-    const gltfMesh = gltfNode.getMesh();
+    const gltfMesh = shouldBuildGeometry ? gltfNode.getMesh() : null;
     let rootEntity: Entity;
     const entitiesCreated: Entity[] = [];
 
