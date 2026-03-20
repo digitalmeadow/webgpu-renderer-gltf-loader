@@ -138,10 +138,6 @@ export class GLTFSceneLoader {
           interpolation = "LINEAR";
         }
 
-        console.log(
-          `[GLTFLoader] Animation channel: node="${targetNode.getName()}", path=${path}, entity=${entity.name}, transformId=${entity.transform}`,
-        );
-
         const curve = new AnimationCurve(
           entity.transform,
           path as AnimationPath,
@@ -164,10 +160,6 @@ export class GLTFSceneLoader {
     const joints = gltfSkin.listJoints();
     const jointEntities: Entity[] = [];
     const inverseBindMatrices: Mat4[] = [];
-
-    console.log(
-      `[GLTFLoader] Processing skin: ${gltfSkin.getName() || "unnamed"}, joints: ${joints.length}`,
-    );
 
     const ibmAccessor = gltfSkin.getInverseBindMatrices();
     const ibmArray = ibmAccessor?.getArray() as Float32Array | null;
@@ -193,13 +185,6 @@ export class GLTFSceneLoader {
         entity.transform.setScale(scale[0], scale[1], scale[2]);
 
         this.nodeToEntityMap.set(jointNode, entity);
-        console.log(
-          `[GLTFLoader] Created new joint entity: "${entity.name}", transformId=${entity.transform}`,
-        );
-      } else {
-        console.log(
-          `[GLTFLoader] Found existing entity for joint: "${entity.name}", transformId=${entity.transform}`,
-        );
       }
 
       jointEntities.push(entity);
@@ -227,29 +212,16 @@ export class GLTFSceneLoader {
       }
     }
 
-    console.log(
-      `[GLTFLoader] SkinData created with ${jointEntities.length} joints`,
-    );
     return new SkinData(jointEntities, inverseBindMatrices);
   }
 
   private processNode(gltfNode: GLTFNode, scene: Scene): Entity | null {
     const name = gltfNode.getName() || "Node";
 
-    console.log(
-      `[GLTFLoader] Processing node: "${name}", hasSkin=${!!gltfNode.getSkin()}, hasMesh=${!!gltfNode.getMesh()}`,
-    );
-
-    // OPTION C FIX: Check if entity already exists (may have been created by processSkin)
     let rootEntity = this.nodeToEntityMap.get(gltfNode);
     const entitiesCreated: Entity[] = [];
 
-    if (rootEntity) {
-      console.log(
-        `[GLTFLoader] Reusing existing entity: "${rootEntity.name}", transformId=${rootEntity.transform}`,
-      );
-    } else {
-      // Only create new entity if one doesn't exist
+    if (!rootEntity) {
       let shouldBuildGeometry = true;
       if (this.onPreProcessNode) {
         shouldBuildGeometry = this.onPreProcessNode(gltfNode);
@@ -263,9 +235,6 @@ export class GLTFSceneLoader {
         if (primitives.length === 1) {
           rootEntity = this.createMeshFromPrimitive(primitives[0], name);
           entitiesCreated.push(rootEntity);
-          console.log(
-            `[GLTFLoader] Created mesh entity: "${rootEntity.name}", transformId=${rootEntity.transform}`,
-          );
         } else {
           rootEntity = new GroupEntity(name);
           entitiesCreated.push(rootEntity);
@@ -281,12 +250,8 @@ export class GLTFSceneLoader {
       } else {
         rootEntity = new GroupEntity(name);
         entitiesCreated.push(rootEntity);
-        console.log(
-          `[GLTFLoader] Created group entity: "${rootEntity.name}", transformId=${rootEntity.transform}`,
-        );
       }
 
-      // Set transforms only for newly created entities
       const position = gltfNode.getTranslation();
       const rotation = gltfNode.getRotation();
       const scale = gltfNode.getScale();
@@ -300,13 +265,11 @@ export class GLTFSceneLoader {
       );
       rootEntity.transform.setScale(scale[0], scale[1], scale[2]);
 
-      // Add to map only once (when created)
       this.nodeToEntityMap.set(gltfNode, rootEntity);
     }
 
     const gltfSkin = gltfNode.getSkin();
     if (gltfSkin && rootEntity instanceof Mesh) {
-      console.log(`[GLTFLoader] Node "${name}" has skin, processing...`);
       let skinData = this.parsedSkins.get(gltfSkin);
       if (!skinData) {
         skinData = this.processSkin(gltfSkin);
