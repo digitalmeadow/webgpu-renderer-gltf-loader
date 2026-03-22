@@ -9,8 +9,10 @@ import {
 import {
   Renderer,
   Scene,
-  Entity,
   Mesh,
+  GroupEntity,
+  Entity,
+  EntityType,
   Geometry,
   Vertex,
   MaterialPBR,
@@ -24,12 +26,6 @@ import {
   Mat4,
   SkinData,
 } from "@digitalmeadow/webgpu-renderer";
-
-export class GroupEntity extends Entity {
-  constructor(name: string = "Group") {
-    super(name);
-  }
-}
 
 export type PreProcessNodeHook = (gltfNode: GLTFNode) => boolean;
 export type ProcessNodeHook = (gltfNode: GLTFNode, entity: Entity) => boolean;
@@ -169,21 +165,28 @@ export class GLTFSceneLoader {
 
       let entity = this.nodeToEntityMap.get(jointNode);
       if (!entity) {
-        entity = new GroupEntity(jointNode.getName() || `Joint_${i}`);
+        const groupEntity = new GroupEntity(
+          jointNode.getName() || `Joint_${i}`,
+        );
 
         const position = jointNode.getTranslation();
         const rotation = jointNode.getRotation();
         const scale = jointNode.getScale();
 
-        entity.transform.setPosition(position[0], position[1], position[2]);
-        entity.transform.setRotationQuat(
+        groupEntity.transform.setPosition(
+          position[0],
+          position[1],
+          position[2],
+        );
+        groupEntity.transform.setRotationQuat(
           rotation[0],
           rotation[1],
           rotation[2],
           rotation[3],
         );
-        entity.transform.setScale(scale[0], scale[1], scale[2]);
+        groupEntity.transform.setScale(scale[0], scale[1], scale[2]);
 
+        entity = groupEntity;
         this.nodeToEntityMap.set(jointNode, entity);
       }
 
@@ -236,7 +239,8 @@ export class GLTFSceneLoader {
           rootEntity = this.createMeshFromPrimitive(primitives[0], name);
           entitiesCreated.push(rootEntity);
         } else {
-          rootEntity = new GroupEntity(name);
+          const groupEntity = new GroupEntity(name);
+          rootEntity = groupEntity;
           entitiesCreated.push(rootEntity);
           for (let i = 0; i < primitives.length; i++) {
             const primEntity = this.createMeshFromPrimitive(
@@ -244,11 +248,12 @@ export class GLTFSceneLoader {
               `${name}_prim${i}`,
             );
             entitiesCreated.push(primEntity);
-            rootEntity.transform.addChild(primEntity.transform);
+            groupEntity.transform.addChild(primEntity.transform);
           }
         }
       } else {
-        rootEntity = new GroupEntity(name);
+        const groupEntity = new GroupEntity(name);
+        rootEntity = groupEntity;
         entitiesCreated.push(rootEntity);
       }
 
@@ -269,13 +274,13 @@ export class GLTFSceneLoader {
     }
 
     const gltfSkin = gltfNode.getSkin();
-    if (gltfSkin && rootEntity instanceof Mesh) {
+    if (gltfSkin && rootEntity.type === EntityType.Mesh) {
       let skinData = this.parsedSkins.get(gltfSkin);
       if (!skinData) {
         skinData = this.processSkin(gltfSkin);
         this.parsedSkins.set(gltfSkin, skinData);
       }
-      rootEntity.skinData = skinData;
+      (rootEntity as Mesh).skinData = skinData;
     }
 
     if (this.onProcessNode) {
@@ -285,8 +290,8 @@ export class GLTFSceneLoader {
       }
     }
 
-    for (const ent of entitiesCreated) {
-      scene.add(ent);
+    for (const entity of entitiesCreated) {
+      scene.add(entity);
     }
 
     for (const childNode of gltfNode.listChildren()) {
