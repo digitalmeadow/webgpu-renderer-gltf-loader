@@ -412,10 +412,8 @@ export class GLTFSceneLoader {
         basic.alphaMode = "opaque";
       } else if (alphaMode === "BLEND") {
         basic.alphaMode = "blend";
-        basic.renderPass = "forward";
       } else if (alphaMode === "MASK") {
         basic.alphaMode = "mask";
-        basic.renderPass = "forward";
       }
       basic.alphaCutoff = gltfMaterial.getAlphaCutoff();
       const baseColorFactor = gltfMaterial.getBaseColorFactor();
@@ -436,10 +434,8 @@ export class GLTFSceneLoader {
       pbr.alphaMode = "opaque";
     } else if (alphaMode === "BLEND") {
       pbr.alphaMode = "blend";
-      pbr.renderPass = "forward";
     } else if (alphaMode === "MASK") {
       pbr.alphaMode = "mask";
-      pbr.renderPass = "forward";
     }
 
     pbr.alphaCutoff = gltfMaterial.getAlphaCutoff();
