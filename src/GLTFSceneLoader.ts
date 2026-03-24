@@ -470,6 +470,16 @@ export class GLTFSceneLoader {
         this.getTextureFromGLTFTexture(metalRoughTex);
     }
 
+    const emissiveTex = gltfMaterial.getEmissiveTexture();
+    if (emissiveTex) {
+      pbr.emissiveTexture = this.getTextureFromGLTFTexture(emissiveTex);
+    }
+
+    const emissiveFactor = gltfMaterial.getEmissiveFactor();
+    if (emissiveFactor) {
+      pbr.emissiveFactor = emissiveFactor as [number, number, number];
+    }
+
     this.parsedMaterials.set(gltfMaterial, pbr);
     return pbr;
   }
