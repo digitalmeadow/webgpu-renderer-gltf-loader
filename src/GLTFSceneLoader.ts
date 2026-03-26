@@ -472,9 +472,7 @@ export class GLTFSceneLoader {
     }
 
     const emissiveFactor = gltfMaterial.getEmissiveFactor();
-    if (emissiveFactor) {
-      pbr.emissiveFactor = emissiveFactor as [number, number, number];
-    }
+    pbr.emissiveFactor = emissiveFactor as [number, number, number];
 
     this.parsedMaterials.set(gltfMaterial, pbr);
     return pbr;
