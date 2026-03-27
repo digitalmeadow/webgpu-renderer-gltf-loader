@@ -8,7 +8,7 @@ export default defineConfig({
   build: {
     lib: {
       entry: resolve(__dirname, "src/index.ts"),
-      name: "ControlPanel",
+      name: "WebGPU Renderer GLTF Loader",
       fileName: "index",
     },
   },
