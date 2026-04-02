@@ -307,6 +307,7 @@ export class GLTFSceneLoader {
   private createMeshFromPrimitive(primitive: any, name: string): Mesh {
     const positionAccessor = primitive.getAttribute("POSITION");
     const normalAccessor = primitive.getAttribute("NORMAL");
+    const tangentAccessor = primitive.getAttribute("TANGENT");
     const uvAccessor = primitive.getAttribute("TEXCOORD_0");
     const jointsAccessor = primitive.getAttribute("JOINTS_0");
     const weightsAccessor = primitive.getAttribute("WEIGHTS_0");
@@ -324,6 +325,9 @@ export class GLTFSceneLoader {
       const norm = normalAccessor
         ? (normalAccessor.getElement(i, []) as number[])
         : [0, 1, 0];
+      const tang = tangentAccessor
+        ? (tangentAccessor.getElement(i, []) as number[])
+        : [1, 0, 0, 1];
       const uv = uvAccessor
         ? (uvAccessor.getElement(i, []) as number[])
         : [0, 0];
@@ -353,6 +357,7 @@ export class GLTFSceneLoader {
         new Vertex(
           [pos[0], pos[1], pos[2], 1.0],
           [norm[0], norm[1], norm[2], 0.0],
+          [tang[0], tang[1], tang[2], tang[3] ?? 1.0],
           [uv[0], uv[1]],
           jointIndices,
           jointWeights,
