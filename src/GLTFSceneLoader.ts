@@ -5,6 +5,8 @@ import {
   Material as GLTFMaterial,
   Texture as GLTFTexture,
   Skin as GLTFSkin,
+  Primitive as GLTFPrimitive,
+  Mesh as GLTFMesh,
 } from "@gltf-transform/core";
 import {
   Renderer,
@@ -37,6 +39,7 @@ export class GLTFSceneLoader {
 
   private parsedMaterials = new Map<GLTFMaterial, MaterialBase>();
   private parsedTextures = new Map<GLTFTexture, Texture>();
+  private parsedGeometries = new Map<GLTFPrimitive, Geometry>();
   private nodeToEntityMap = new Map<GLTFNode, Entity>();
   private parsedSkins = new Map<GLTFSkin, SkinData>();
   private nodeToJointIndex = new Map<GLTFNode, number>();
@@ -72,6 +75,7 @@ export class GLTFSceneLoader {
     this.nodeToEntityMap.clear();
     this.parsedSkins.clear();
     this.nodeToJointIndex.clear();
+    this.parsedGeometries.clear();
 
     const root = document.getRoot();
     const defaultScene = root.getDefaultScene() || root.listScenes()[0];
@@ -236,7 +240,11 @@ export class GLTFSceneLoader {
         const primitives = gltfMesh.listPrimitives();
 
         if (primitives.length === 1) {
-          rootEntity = this.createMeshFromPrimitive(primitives[0], name);
+          rootEntity = this.createMeshFromPrimitive(
+            primitives[0],
+            gltfMesh,
+            name,
+          );
           entitiesCreated.push(rootEntity);
         } else {
           const groupEntity = new GroupEntity(name);
@@ -245,6 +253,7 @@ export class GLTFSceneLoader {
           for (let i = 0; i < primitives.length; i++) {
             const primEntity = this.createMeshFromPrimitive(
               primitives[i],
+              gltfMesh,
               `${name}_prim${i}`,
             );
             entitiesCreated.push(primEntity);
@@ -304,80 +313,103 @@ export class GLTFSceneLoader {
     return rootEntity;
   }
 
-  private createMeshFromPrimitive(primitive: any, name: string): Mesh {
-    const positionAccessor = primitive.getAttribute("POSITION");
-    const normalAccessor = primitive.getAttribute("NORMAL");
-    const tangentAccessor = primitive.getAttribute("TANGENT");
-    const uvAccessor = primitive.getAttribute("TEXCOORD_0");
-    const jointsAccessor = primitive.getAttribute("JOINTS_0");
-    const weightsAccessor = primitive.getAttribute("WEIGHTS_0");
-    const indicesAccessor = primitive.getIndices();
-
-    if (!positionAccessor) {
-      throw new Error("Primitive missing POSITION attribute");
-    }
-
-    const count = positionAccessor.getCount();
-    const vertices: Vertex[] = [];
-
-    for (let i = 0; i < count; i++) {
-      const pos = positionAccessor.getElement(i, []) as number[];
-      const norm = normalAccessor
-        ? (normalAccessor.getElement(i, []) as number[])
-        : [0, 1, 0];
-      const tang = tangentAccessor
-        ? (tangentAccessor.getElement(i, []) as number[])
-        : [1, 0, 0, 1];
-      const uv = uvAccessor
-        ? (uvAccessor.getElement(i, []) as number[])
-        : [0, 0];
-
-      let jointIndices: [number, number, number, number] = [0, 0, 0, 0];
-      let jointWeights: [number, number, number, number] = [0, 0, 0, 0];
-
-      if (jointsAccessor && weightsAccessor) {
-        const joints = jointsAccessor.getElement(i, []) as number[];
-        const weights = weightsAccessor.getElement(i, []) as number[];
-
-        jointIndices = [
-          joints[0] || 0,
-          joints[1] || 0,
-          joints[2] || 0,
-          joints[3] || 0,
-        ];
-        jointWeights = [
-          weights[0] || 0,
-          weights[1] || 0,
-          weights[2] || 0,
-          weights[3] || 0,
-        ];
-      }
-
-      vertices.push(
-        new Vertex(
-          [pos[0], pos[1], pos[2], 1.0],
-          [norm[0], norm[1], norm[2], 0.0],
-          [tang[0], tang[1], tang[2], tang[3] ?? 1.0],
-          [uv[0], uv[1]],
-          jointIndices,
-          jointWeights,
-        ),
-      );
-    }
-
-    let indices: number[] = [];
-    if (indicesAccessor) {
-      const idxArray = indicesAccessor.getArray();
-      if (idxArray) {
-        indices = Array.from(idxArray);
-      }
+  private createMeshFromPrimitive(
+    primitive: GLTFPrimitive,
+    gltfMesh: GLTFMesh,
+    name: string,
+  ): Mesh {
+    // Check if geometry already parsed for this primitive
+    let geometry: Geometry;
+    if (this.parsedGeometries.has(primitive)) {
+      geometry = this.parsedGeometries.get(primitive)!;
     } else {
-      for (let i = 0; i < count; i++) {
-        indices.push(i);
-      }
-    }
+      // Create new geometry from primitive data
+      const positionAccessor = primitive.getAttribute("POSITION");
+      const normalAccessor = primitive.getAttribute("NORMAL");
+      const tangentAccessor = primitive.getAttribute("TANGENT");
+      const jointsAccessor = primitive.getAttribute("JOINTS_0");
+      const weightsAccessor = primitive.getAttribute("WEIGHTS_0");
+      const indicesAccessor = primitive.getIndices();
 
-    const geometry = new Geometry(this.renderer.getDevice(), vertices, indices);
+      let uvAttributeName = "TEXCOORD_0";
+      const uvMapIndexAttr = primitive.getAttribute("_UV_MAP_INDEX");
+      if (uvMapIndexAttr) {
+        const indexValue = uvMapIndexAttr.getElement(0, []) as number[];
+        const uvIndex = Math.round(indexValue[0] ?? 0);
+        uvAttributeName = `TEXCOORD_${uvIndex}`;
+      }
+      let uvAccessor = primitive.getAttribute(uvAttributeName);
+      if (!uvAccessor && uvAttributeName !== "TEXCOORD_0") {
+        uvAccessor = primitive.getAttribute("TEXCOORD_0");
+      }
+
+      if (!positionAccessor) {
+        throw new Error("Primitive missing POSITION attribute");
+      }
+
+      const count = positionAccessor.getCount();
+      const vertices: Vertex[] = [];
+
+      for (let i = 0; i < count; i++) {
+        const pos = positionAccessor.getElement(i, []) as number[];
+        const norm = normalAccessor
+          ? (normalAccessor.getElement(i, []) as number[])
+          : [0, 1, 0];
+        const tang = tangentAccessor
+          ? (tangentAccessor.getElement(i, []) as number[])
+          : [1, 0, 0, 1];
+        const uv = uvAccessor
+          ? (uvAccessor.getElement(i, []) as number[])
+          : [0, 0];
+
+        let jointIndices: [number, number, number, number] = [0, 0, 0, 0];
+        let jointWeights: [number, number, number, number] = [0, 0, 0, 0];
+
+        if (jointsAccessor && weightsAccessor) {
+          const joints = jointsAccessor.getElement(i, []) as number[];
+          const weights = weightsAccessor.getElement(i, []) as number[];
+
+          jointIndices = [
+            joints[0] || 0,
+            joints[1] || 0,
+            joints[2] || 0,
+            joints[3] || 0,
+          ];
+          jointWeights = [
+            weights[0] || 0,
+            weights[1] || 0,
+            weights[2] || 0,
+            weights[3] || 0,
+          ];
+        }
+
+        vertices.push(
+          new Vertex(
+            [pos[0], pos[1], pos[2], 1.0],
+            [norm[0], norm[1], norm[2], 0.0],
+            [tang[0], tang[1], tang[2], tang[3] ?? 1.0],
+            [uv[0], uv[1]],
+            jointIndices,
+            jointWeights,
+          ),
+        );
+      }
+
+      let indices: number[] = [];
+      if (indicesAccessor) {
+        const idxArray = indicesAccessor.getArray();
+        if (idxArray) {
+          indices = Array.from(idxArray);
+        }
+      } else {
+        for (let i = 0; i < count; i++) {
+          indices.push(i);
+        }
+      }
+
+      geometry = new Geometry(this.renderer.getDevice(), vertices, indices);
+      this.parsedGeometries.set(primitive, geometry);
+    }
 
     const gltfMaterial = primitive.getMaterial();
     let material: MaterialBase;
@@ -391,7 +423,41 @@ export class GLTFSceneLoader {
       );
     }
 
-    return new Mesh(this.renderer.getDevice(), name, geometry, material);
+    const mesh = new Mesh(this.renderer.getDevice(), name, geometry, material);
+
+    const extras = gltfMesh.getExtras();
+    if (extras?.billboard) {
+      const axis = extras.billboard as string;
+      if (axis === "x" || axis === "y" || axis === "z") {
+        mesh.billboard = axis;
+      }
+    }
+
+    // Read instanceGroupId from extras if present
+    if (extras?.instanceGroupId) {
+      mesh.instanceGroupId = extras.instanceGroupId as string;
+    }
+
+    // Read sortByDepth from extras if present
+    if (extras?.sortByDepth === true) {
+      mesh.sortByDepth = true;
+    }
+
+    // Read custom instance data from extras if present
+    if (extras?.customData0) {
+      const data = extras.customData0;
+      if (Array.isArray(data) && data.length === 4) {
+        mesh.instanceData.customData0 = [data[0], data[1], data[2], data[3]];
+      }
+    }
+    if (extras?.customData1) {
+      const data = extras.customData1;
+      if (Array.isArray(data) && data.length === 4) {
+        mesh.instanceData.customData1 = [data[0], data[1], data[2], data[3]];
+      }
+    }
+
+    return mesh;
   }
 
   private processMaterial(gltfMaterial: GLTFMaterial): MaterialBase {
@@ -420,6 +486,13 @@ export class GLTFSceneLoader {
       } else if (alphaMode === "MASK") {
         basic.alphaMode = "mask";
       }
+
+      // Check for alphaMode override in extras
+      const materialExtras = gltfMaterial.getExtras();
+      if (materialExtras?.alphaMode === "dither") {
+        basic.alphaMode = "dither";
+      }
+
       basic.alphaCutoff = gltfMaterial.getAlphaCutoff();
       const baseColorFactor = gltfMaterial.getBaseColorFactor();
       if (baseColorFactor) {
@@ -441,6 +514,12 @@ export class GLTFSceneLoader {
       pbr.alphaMode = "blend";
     } else if (alphaMode === "MASK") {
       pbr.alphaMode = "mask";
+    }
+
+    // Check for alphaMode override in extras
+    const materialExtras = gltfMaterial.getExtras();
+    if (materialExtras?.alphaMode === "dither") {
+      pbr.alphaMode = "dither";
     }
 
     pbr.alphaCutoff = gltfMaterial.getAlphaCutoff();
@@ -477,7 +556,21 @@ export class GLTFSceneLoader {
     }
 
     const emissiveFactor = gltfMaterial.getEmissiveFactor();
-    pbr.emissiveFactor = emissiveFactor as [number, number, number];
+
+    // If there's an emissive texture, use pass-through factor and extract intensity
+    if (emissiveTex) {
+      pbr.emissiveFactor = [1, 1, 1]; // Pass through texture color
+      // Extract intensity from GLTF factor magnitude (max of RGB channels)
+      pbr.emissiveIntensity = Math.max(
+        emissiveFactor[0],
+        emissiveFactor[1],
+        emissiveFactor[2],
+      );
+    } else {
+      // No texture: use factor for solid emissive color
+      pbr.emissiveFactor = emissiveFactor as [number, number, number];
+      pbr.emissiveIntensity = 1.0;
+    }
 
     this.parsedMaterials.set(gltfMaterial, pbr);
     return pbr;
