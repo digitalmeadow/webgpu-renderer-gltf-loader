@@ -1,6 +1,6 @@
 {
   "name": "@digitalmeadow/webgpu-renderer-gltf-loader",
-  "version": "0.0.4",
+  "version": "0.0.6",
   "type": "module",
   "description": "A GLTF loader utility for the WebGPU Renderer",
   "author": "Digital Meadow <inbox@digitalmeadow.studio> (https://digitalmeadow.studio)",
@@ -38,7 +38,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@digitalmeadow/webgpu-renderer": "workspace:*",
+    "@digitalmeadow/webgpu-renderer": "0.0.4",
     "@gltf-transform/core": "4.3.0"
   },
   "devDependencies": {
