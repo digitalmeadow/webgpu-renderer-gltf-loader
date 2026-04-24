@@ -38,7 +38,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@digitalmeadow/webgpu-renderer": "0.0.4",
+    "@digitalmeadow/webgpu-renderer": "workspace:*",
     "@gltf-transform/core": "4.3.0"
   },
   "devDependencies": {

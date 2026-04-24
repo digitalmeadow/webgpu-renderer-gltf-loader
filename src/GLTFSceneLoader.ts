@@ -82,8 +82,20 @@ export class GLTFSceneLoader {
 
     if (!defaultScene) return Promise.resolve({ clips: [] });
 
+    // Babylon.js __root__ method: wrap all glTF nodes under a single root with
+    // 180° Y rotation + Z scale -1 to convert RH→LH once at the scene graph level.
+    // Net effect: negates X, preserving Y and Z. Mirror flips triangle winding
+    // from CCW (glTF) to CW (matches frontFace: "cw").
+    const rootEntity = new GroupEntity("__root__");
+    rootEntity.transform.setRotationQuat(0, 1, 0, 0); // 180° Y
+    rootEntity.transform.setScale(1, 1, -1);
+    scene.add(rootEntity);
+
     for (const gltfNode of defaultScene.listChildren()) {
-      this.processNode(gltfNode, scene);
+      const entity = this.processNode(gltfNode, scene);
+      if (entity) {
+        rootEntity.transform.addChild(entity.transform);
+      }
     }
 
     const clips = this.processAnimations(document);
@@ -177,6 +189,7 @@ export class GLTFSceneLoader {
         const rotation = jointNode.getRotation();
         const scale = jointNode.getScale();
 
+        // Raw glTF transforms — RH→LH handled by __root__ parent
         groupEntity.transform.setPosition(
           position[0],
           position[1],
@@ -270,6 +283,7 @@ export class GLTFSceneLoader {
       const rotation = gltfNode.getRotation();
       const scale = gltfNode.getScale();
 
+      // Raw glTF transforms — RH→LH handled by __root__ parent
       rootEntity.transform.setPosition(position[0], position[1], position[2]);
       rootEntity.transform.setRotationQuat(
         rotation[0],
@@ -399,11 +413,15 @@ export class GLTFSceneLoader {
       if (indicesAccessor) {
         const idxArray = indicesAccessor.getArray();
         if (idxArray) {
-          indices = Array.from(idxArray);
+          // Swap i1/i2 per triangle: __root__ Z scale -1 mirrors geometry but
+          // doesn't flip index winding — do it here to match frontFace: "cw"
+          for (let i = 0; i < idxArray.length; i += 3) {
+            indices.push(idxArray[i], idxArray[i + 2], idxArray[i + 1]);
+          }
         }
       } else {
-        for (let i = 0; i < count; i++) {
-          indices.push(i);
+        for (let i = 0; i < count; i += 3) {
+          indices.push(i, i + 2, i + 1);
         }
       }
 

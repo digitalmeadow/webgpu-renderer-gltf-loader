@@ -26,15 +26,10 @@ async function main() {
   const renderer = new Renderer(canvas);
   await renderer.init();
 
-  const camera = new Camera(
-    renderer.getDevice(),
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    canvas.clientWidth / canvas.clientHeight,
-  );
-  camera.position.set(0, 1, 5);
+  const camera = new Camera(renderer.getDevice(), {
+    aspect: canvas.clientWidth / canvas.clientHeight,
+  });
+  camera.transform.setPosition(0, 1, 5);
 
   function resize() {
     const rect = canvas.getBoundingClientRect();
