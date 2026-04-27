@@ -10,12 +10,13 @@ export function getPrimitivePositions(primitive: GLTFPrimitive): Float32Array {
   }
 
   const count = positionAccessor.getCount();
+  const rawArray = positionAccessor.getArray() as Float32Array;
   const vertexPositions = new Float32Array(count * 3);
+
   for (let i = 0; i < count; i++) {
-    const pos = positionAccessor.getElement(i, []) as number[];
-    vertexPositions[i * 3] = pos[0];
-    vertexPositions[i * 3 + 1] = pos[1];
-    vertexPositions[i * 3 + 2] = pos[2];
+    vertexPositions[i * 3] = rawArray[i * 3];
+    vertexPositions[i * 3 + 1] = rawArray[i * 3 + 1];
+    vertexPositions[i * 3 + 2] = rawArray[i * 3 + 2];
   }
 
   return vertexPositions;
@@ -23,16 +24,17 @@ export function getPrimitivePositions(primitive: GLTFPrimitive): Float32Array {
 
 /**
  * Extracts raw vertex indices from a GLTF Primitive.
- * Fallbacks to generating sequential flat indices if an index buffer does not exist.
+ * Falls back to generating sequential flat indices if an index buffer does not exist.
  */
 export function getPrimitiveIndices(primitive: GLTFPrimitive): Uint32Array {
   const indicesAccessor = primitive.getIndices();
 
   if (indicesAccessor) {
     const count = indicesAccessor.getCount();
+    const rawArray = indicesAccessor.getArray()!;
     const vertexIndices = new Uint32Array(count);
     for (let i = 0; i < count; i++) {
-      vertexIndices[i] = indicesAccessor.getScalar(i);
+      vertexIndices[i] = rawArray[i];
     }
     return vertexIndices;
   }

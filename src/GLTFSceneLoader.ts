@@ -56,7 +56,7 @@ export class GLTFSceneLoader {
 
     const document = await io.read(url);
 
-    return await this.processDocument(document, scene);
+    return this.processDocument(document, scene);
   }
 
   public async loadFromBuffer(
@@ -65,22 +65,24 @@ export class GLTFSceneLoader {
   ): Promise<{ clips: AnimationClip[] }> {
     const io = new WebIO();
     const document = await io.readBinary(buffer);
-    return await this.processDocument(document, scene);
+    return this.processDocument(document, scene);
   }
 
   private processDocument(
     document: Document,
     scene: Scene,
-  ): Promise<{ clips: AnimationClip[] }> {
+  ): { clips: AnimationClip[] } {
     this.nodeToEntityMap.clear();
     this.parsedSkins.clear();
     this.nodeToJointIndex.clear();
     this.parsedGeometries.clear();
+    this.parsedMaterials.clear();
+    this.parsedTextures.clear();
 
     const root = document.getRoot();
     const defaultScene = root.getDefaultScene() || root.listScenes()[0];
 
-    if (!defaultScene) return Promise.resolve({ clips: [] });
+    if (!defaultScene) return { clips: [] };
 
     // Babylon.js __root__ method: wrap all glTF nodes under a single root with
     // 180° Y rotation + Z scale -1 to convert RH→LH once at the scene graph level.
@@ -100,7 +102,7 @@ export class GLTFSceneLoader {
 
     const clips = this.processAnimations(document);
 
-    return Promise.resolve({ clips });
+    return { clips };
   }
 
   private processAnimations(document: Document): AnimationClip[] {
@@ -147,7 +149,10 @@ export class GLTFSceneLoader {
         if (samplerInterpolation === "STEP") {
           interpolation = "STEP";
         } else if (samplerInterpolation === "CUBICSPLINE") {
-          interpolation = "LINEAR";
+          console.warn(
+            `[GLTFSceneLoader] CUBICSPLINE interpolation is not yet implemented — skipping channel on "${gltfAnim.getName() || "Animation"}".`,
+          );
+          continue;
         }
 
         const curve = new AnimationCurve(
@@ -217,13 +222,13 @@ export class GLTFSceneLoader {
         }
         inverseBindMatrices.push(ibm);
       } else {
-        inverseBindMatrices.push(Mat4.identity());
+        inverseBindMatrices.push(Mat4.create());
       }
     }
 
     for (const jointNode of joints) {
       const parent = jointNode.getParentNode();
-      if (parent && joints.includes(parent)) {
+      if (parent && this.nodeToJointIndex.has(parent)) {
         const childEntity = this.nodeToEntityMap.get(jointNode);
         const parentEntity = this.nodeToEntityMap.get(parent);
         if (childEntity && parentEntity && childEntity !== parentEntity) {
@@ -232,7 +237,7 @@ export class GLTFSceneLoader {
       }
     }
 
-    return new SkinData(jointEntities, inverseBindMatrices);
+    return { joints: jointEntities, inverseBindMatrices };
   }
 
   private processNode(gltfNode: GLTFNode, scene: Scene): Entity | null {
@@ -297,13 +302,17 @@ export class GLTFSceneLoader {
     }
 
     const gltfSkin = gltfNode.getSkin();
-    if (gltfSkin && rootEntity.type === EntityType.Mesh) {
+    if (gltfSkin) {
       let skinData = this.parsedSkins.get(gltfSkin);
       if (!skinData) {
         skinData = this.processSkin(gltfSkin);
         this.parsedSkins.set(gltfSkin, skinData);
       }
-      (rootEntity as Mesh).skinData = skinData;
+      for (const entity of entitiesCreated) {
+        if (entity.type === EntityType.Mesh) {
+          (entity as Mesh).skinData = skinData;
+        }
+      }
     }
 
     if (this.onProcessNode) {
@@ -348,6 +357,9 @@ export class GLTFSceneLoader {
       let uvAttributeName = "TEXCOORD_0";
       const uvMapIndexAttr = primitive.getAttribute("_UV_MAP_INDEX");
       if (uvMapIndexAttr) {
+        // _UV_MAP_INDEX is an internal convention exported from Blender geometry nodes.
+        // It encodes a per-primitive UV set selector as a per-vertex attribute where
+        // all vertices share the same value — vertex 0 is sampled as representative.
         const indexValue = uvMapIndexAttr.getElement(0, []) as number[];
         const uvIndex = Math.round(indexValue[0] ?? 0);
         uvAttributeName = `TEXCOORD_${uvIndex}`;
@@ -384,16 +396,16 @@ export class GLTFSceneLoader {
           const weights = weightsAccessor.getElement(i, []) as number[];
 
           jointIndices = [
-            joints[0] || 0,
-            joints[1] || 0,
-            joints[2] || 0,
-            joints[3] || 0,
+            joints[0] ?? 0,
+            joints[1] ?? 0,
+            joints[2] ?? 0,
+            joints[3] ?? 0,
           ];
           jointWeights = [
-            weights[0] || 0,
-            weights[1] || 0,
-            weights[2] || 0,
-            weights[3] || 0,
+            weights[0] ?? 0,
+            weights[1] ?? 0,
+            weights[2] ?? 0,
+            weights[3] ?? 0,
           ];
         }
 
@@ -575,20 +587,10 @@ export class GLTFSceneLoader {
 
     const emissiveFactor = gltfMaterial.getEmissiveFactor();
 
-    // If there's an emissive texture, use pass-through factor and extract intensity
-    if (emissiveTex) {
-      pbr.emissiveFactor = [1, 1, 1]; // Pass through texture color
-      // Extract intensity from GLTF factor magnitude (max of RGB channels)
-      pbr.emissiveIntensity = Math.max(
-        emissiveFactor[0],
-        emissiveFactor[1],
-        emissiveFactor[2],
-      );
-    } else {
-      // No texture: use factor for solid emissive color
-      pbr.emissiveFactor = emissiveFactor as [number, number, number];
-      pbr.emissiveIntensity = 1.0;
-    }
+    // Per the glTF spec, emissiveFactor is a per-channel multiplier applied to
+    // the emissive texture (or used directly as a solid emissive colour).
+    pbr.emissiveFactor = emissiveFactor as [number, number, number];
+    pbr.emissiveIntensity = 1.0;
 
     this.parsedMaterials.set(gltfMaterial, pbr);
     return pbr;
@@ -610,7 +612,8 @@ export class GLTFSceneLoader {
     const url = URL.createObjectURL(blob);
 
     const texture = new Texture(url);
-    texture.load();
+    // Do not call texture.load() here — MaterialManager.loadMaterial() loads
+    // and uploads each texture, then revokes the blob URL after GPU upload.
 
     this.parsedTextures.set(gltfTexture, texture);
     return texture;
