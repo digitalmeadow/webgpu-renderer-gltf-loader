@@ -587,9 +587,19 @@ export class GLTFSceneLoader {
 
     const emissiveFactor = gltfMaterial.getEmissiveFactor();
 
-    // Per the glTF spec, emissiveFactor is a per-channel multiplier applied to
-    // the emissive texture (or used directly as a solid emissive colour).
-    pbr.emissiveFactor = emissiveFactor as [number, number, number];
+    // Per the glTF spec, emissiveFactor is a per-channel multiplier on the emissive
+    // texture (or the solid emissive colour when no texture is present).
+    // However, Blender's GLTF exporter emits emissiveFactor=[0,0,0] by default when
+    // an emissive texture is plugged in but no explicit factor node is set — an export
+    // artifact that would zero out the texture. Treat [0,0,0]+texture as pass-through [1,1,1].
+    if (emissiveTex) {
+      const hasExplicitFactor = emissiveFactor.some((v) => v !== 0);
+      pbr.emissiveFactor = hasExplicitFactor
+        ? (emissiveFactor as [number, number, number])
+        : [1, 1, 1];
+    } else {
+      pbr.emissiveFactor = emissiveFactor as [number, number, number];
+    }
     pbr.emissiveIntensity = 1.0;
 
     this.parsedMaterials.set(gltfMaterial, pbr);
