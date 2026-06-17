@@ -3,7 +3,7 @@ import {
   World,
   Scene,
   DirectionalLight,
-  Camera,
+  PerspectiveCamera,
   FlyControls,
   Time,
   Vec3,
@@ -26,7 +26,7 @@ async function main() {
   const renderer = new Renderer(canvas);
   await renderer.init();
 
-  const camera = new Camera(renderer.getDevice(), {
+  const camera = new PerspectiveCamera(renderer.getDevice(), undefined, {
     aspect: canvas.clientWidth / canvas.clientHeight,
   });
   camera.transform.setPosition(0, 1, 5);
