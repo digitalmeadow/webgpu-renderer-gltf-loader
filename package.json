@@ -37,12 +37,12 @@
   },
   "dependencies": {
     "@digitalmeadow/webgpu-renderer": "workspace:*",
-    "@gltf-transform/core": "4.3.0"
+    "@gltf-transform/core": "4.4.2"
   },
   "devDependencies": {
-    "@types/node": "^25.2.3",
+    "@types/node": "26.2.0",
     "typescript": "7.0.2",
-    "vite": "7.3.1"
+    "vite": "8.2.1"
   },
   "publishConfig": {
     "access": "public"
