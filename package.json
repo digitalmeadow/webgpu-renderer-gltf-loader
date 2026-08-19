@@ -36,7 +36,7 @@
     "dev": "vite",
     "build": "vite build && tsc",
     "preview": "vite preview",
-    "publish": "npm run build && npm publish"
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@gltf-transform/core": "4.4.2"
