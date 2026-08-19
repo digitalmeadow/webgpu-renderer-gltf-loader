@@ -1,6 +1,6 @@
 {
   "name": "@digitalmeadow/webgpu-renderer-gltf-loader",
-  "version": "0.0.6",
+  "version": "0.1.0",
   "type": "module",
   "description": "A GLTF loader utility for the WebGPU Renderer",
   "author": "Digital Meadow <inbox@digitalmeadow.studio> (https://digitalmeadow.studio)",
@@ -22,24 +22,30 @@
   "files": [
     "dist"
   ],
+  "sideEffects": false,
+  "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "default": "./dist/index.js"
     }
   },
   "scripts": {
     "dev": "vite",
     "build": "vite build && tsc",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "publish": "npm run build && npm publish"
   },
   "dependencies": {
-    "@digitalmeadow/webgpu-renderer": "workspace:*",
     "@gltf-transform/core": "4.4.2"
   },
+  "peerDependencies": {
+    "@digitalmeadow/webgpu-renderer": "^0.1.0"
+  },
   "devDependencies": {
+    "@digitalmeadow/webgpu-renderer": "workspace:*",
     "@types/node": "26.2.0",
     "typescript": "7.0.2",
     "vite": "8.2.1"
